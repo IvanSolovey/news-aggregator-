@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 0 * * *"
+    }
+  ],
+  "functions": {
+    "api/webhook.ts": {
+      "maxDuration": 30
+    },
+    "api/cron.ts": {
+      "maxDuration": 300
+    }
+  }
+}
