@@ -1,17 +1,17 @@
 import { Markup, type Context } from 'telegraf';
+import type { InlineKeyboardMarkup } from 'telegraf/types';
 import { getUserSettings, setUserSettings } from '../../storage/redis';
 import { isTranslationAvailable } from '../../translation';
 
-function translateKeyboard(isOn: boolean) {
+function translateKeyboard(isOn: boolean): InlineKeyboardMarkup {
   const label = isOn ? '🔇 Вимкнути переклад' : '🌐 Увімкнути переклад';
-  return Markup.inlineKeyboard([[Markup.button.callback(label, 'translate')]]);
+  return Markup.inlineKeyboard([[Markup.button.callback(label, 'translate')]]).reply_markup;
 }
 
-async function replyTranslateState(ctx: Context, isOn: boolean): Promise<void> {
-  const status = isOn
+function translateText(isOn: boolean): string {
+  return isOn
     ? '🌐 Переклад на українську: <b>увімкнено</b>'
     : '🔇 Переклад: <b>вимкнено</b>';
-  await ctx.replyWithHTML(status, translateKeyboard(isOn));
 }
 
 export async function handleTranslate(ctx: Context): Promise<void> {
@@ -29,13 +29,19 @@ export async function handleTranslate(ctx: Context): Promise<void> {
   const settings = await getUserSettings(chatId);
   const newValue = !settings.translate;
   await setUserSettings(chatId, { translate: newValue });
-  await replyTranslateState(ctx, newValue);
+
+  await ctx.replyWithHTML(translateText(newValue), {
+    reply_markup: translateKeyboard(newValue),
+  });
 }
 
-// Callback: translate
+// Called from bot/index.ts after answerCbQuery is already sent
 export async function handleTranslateCallback(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
-  if (!chatId) return;
+  if (!chatId) {
+    await ctx.answerCbQuery().catch(() => {});
+    return;
+  }
 
   if (!isTranslationAvailable()) {
     await ctx.answerCbQuery('Переклад не налаштований.');
@@ -46,15 +52,11 @@ export async function handleTranslateCallback(ctx: Context): Promise<void> {
   const newValue = !settings.translate;
   await setUserSettings(chatId, { translate: newValue });
 
-  const status = newValue ? 'Переклад увімкнено' : 'Переклад вимкнено';
+  const status = newValue ? '🌐 Переклад увімкнено' : '🔇 Переклад вимкнено';
   await ctx.answerCbQuery(status);
 
-  const label = newValue
-    ? '🌐 Переклад на українську: <b>увімкнено</b>'
-    : '🔇 Переклад: <b>вимкнено</b>';
-
-  await ctx.editMessageText(label, {
-    ...translateKeyboard(newValue),
+  await ctx.editMessageText(translateText(newValue), {
     parse_mode: 'HTML',
+    reply_markup: translateKeyboard(newValue),
   });
 }

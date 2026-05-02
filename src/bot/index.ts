@@ -19,29 +19,33 @@ export function createBot(): Telegraf {
   bot.command('translate', handleTranslate);
   bot.command('news', handleNews);
 
-  // Inline button callbacks
+  // Callbacks: answer immediately to stop the spinner, then do work
   bot.action('news', async ctx => {
-    await ctx.answerCbQuery();
-    await handleNews(ctx);
+    await ctx.answerCbQuery().catch(() => {});
+    await handleNews(ctx).catch(console.error);
   });
 
   bot.action('list', async ctx => {
-    await ctx.answerCbQuery();
-    await handleList(ctx);
+    await ctx.answerCbQuery().catch(() => {});
+    await handleList(ctx).catch(console.error);
   });
 
   bot.action('translate', async ctx => {
-    await handleTranslateCallback(ctx);
+    await handleTranslateCallback(ctx).catch(async err => {
+      console.error('translate callback error:', err);
+      await ctx.answerCbQuery('Помилка. Спробуйте ще раз.').catch(() => {});
+    });
   });
 
-  // rm:<urlHash> — remove feed by hash
   bot.action(/^rm:(.+)$/, async ctx => {
+    await ctx.answerCbQuery().catch(() => {});
     const hash = ctx.match[1];
-    await handleRemoveCallback(ctx, hash);
+    await handleRemoveCallback(ctx, hash).catch(console.error);
   });
 
-  // noop — feed name buttons in /list are decorative
-  bot.action('noop', ctx => ctx.answerCbQuery());
+  bot.action('noop', async ctx => {
+    await ctx.answerCbQuery().catch(() => {});
+  });
 
   bot.on('message', ctx =>
     ctx.reply('Невідома команда. Напишіть /help щоб побачити список команд.')

@@ -1,4 +1,5 @@
 import { Markup, type Context } from 'telegraf';
+import type { InlineKeyboardMarkup } from 'telegraf/types';
 import {
   getUserFeeds,
   getUserSettings,
@@ -12,24 +13,8 @@ import type { Telegraf } from 'telegraf';
 
 const MAX_ARTICLES_PER_COMMAND = 5;
 
-const refreshKeyboard = Markup.inlineKeyboard([
-  [Markup.button.callback('🔄 Оновити', 'news')],
-]);
-
-async function sendArticle(
-  send: (text: string, imageUrl?: string) => Promise<void>,
-  text: string,
-  imageUrl?: string
-): Promise<void> {
-  if (imageUrl) {
-    try {
-      await send(text, imageUrl);
-      return;
-    } catch {
-      // fall through to text-only
-    }
-  }
-  await send(text);
+function refreshKeyboard(): InlineKeyboardMarkup {
+  return Markup.inlineKeyboard([[Markup.button.callback('🔄 Оновити', 'news')]]).reply_markup;
 }
 
 export async function handleNews(ctx: Context): Promise<void> {
@@ -38,9 +23,7 @@ export async function handleNews(ctx: Context): Promise<void> {
 
   const feeds = await getUserFeeds(chatId);
   if (feeds.length === 0) {
-    await ctx.reply(
-      'Ви не підписані на жодну стрічку.\nДодайте за допомогою /add <url>'
-    );
+    await ctx.reply('Ви не підписані на жодну стрічку.\nДодайте за допомогою /add <url>');
     return;
   }
 
@@ -73,28 +56,29 @@ export async function handleNews(ctx: Context): Promise<void> {
 
       const text = formatArticle(article, translated);
       const isLast = sent === MAX_ARTICLES_PER_COMMAND - 1;
-      const keyboard = isLast ? refreshKeyboard : undefined;
+      const keyboard = isLast ? refreshKeyboard() : undefined;
 
       try {
         if (article.imageUrl) {
           await ctx.replyWithPhoto(article.imageUrl, {
             caption: text,
             parse_mode: 'HTML',
-            ...(keyboard ?? {}),
+            reply_markup: keyboard,
           });
         } else {
           await ctx.replyWithHTML(text, {
             link_preview_options: { is_disabled: true },
-            ...(keyboard ?? {}),
+            reply_markup: keyboard,
           });
         }
         await markArticleSent(chatId, article.link);
         sent++;
       } catch {
+        // photo inaccessible — retry as text
         try {
           await ctx.replyWithHTML(text, {
             link_preview_options: { is_disabled: true },
-            ...(keyboard ?? {}),
+            reply_markup: keyboard,
           });
           await markArticleSent(chatId, article.link);
           sent++;
@@ -104,10 +88,9 @@ export async function handleNews(ctx: Context): Promise<void> {
   }
 
   if (sent === 0) {
-    await ctx.reply(
-      'Нових статей немає. Перевірте пізніше або додайте більше стрічок.',
-      refreshKeyboard
-    );
+    await ctx.reply('Нових статей немає. Перевірте пізніше або додайте більше стрічок.', {
+      reply_markup: refreshKeyboard(),
+    });
   }
 }
 
