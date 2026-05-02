@@ -43,7 +43,7 @@ export async function getUserFeeds(chatId: number): Promise<FeedInfo[]> {
   if (urls.length === 0) return [];
 
   const nameKeys = urls.map(u => `feed:${urlHash(u)}:name`);
-  const names = await redis.mget<string[]>(...nameKeys);
+  const names = await redis.mget<string | null>(...nameKeys);
 
   return urls.map((url, i) => ({ url, name: names[i] ?? url }));
 }
