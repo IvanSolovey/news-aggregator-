@@ -1,5 +1,17 @@
-import type { Context } from 'telegraf';
+import { Markup, type Context } from 'telegraf';
 import { registerUser } from '../../storage/redis';
+
+export function mainKeyboard() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('📰 Новини', 'news'),
+      Markup.button.callback('📋 Мої стрічки', 'list'),
+    ],
+    [
+      Markup.button.callback('🌐 Переклад', 'translate'),
+    ],
+  ]);
+}
 
 export async function handleStart(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
@@ -16,9 +28,9 @@ export async function handleStart(ctx: Context): Promise<void> {
     `/list — переглянути підписки\n` +
     `/remove &lt;номер&gt; — видалити стрічку\n` +
     `/translate — увімкнути/вимкнути переклад\n` +
-    `/news — отримати свіжі новини зараз\n` +
-    `/help — показати цю довідку\n\n` +
+    `/news — отримати свіжі новини зараз\n\n` +
     `<b>Приклад:</b>\n` +
-    `/add https://feeds.bbci.co.uk/news/rss.xml`
+    `/add https://feeds.bbci.co.uk/news/rss.xml`,
+    mainKeyboard()
   );
 }

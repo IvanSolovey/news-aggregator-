@@ -79,6 +79,15 @@ export async function markArticleSent(chatId: number, articleUrl: string): Promi
   await redis.set(key, '1', { ex: SENT_TTL });
 }
 
+export function feedUrlHash(url: string): string {
+  return urlHash(url);
+}
+
+export async function getFeedUrlByHash(chatId: number, hash: string): Promise<string | null> {
+  const urls = await redis.smembers(`user:${chatId}:feeds`);
+  return urls.find(u => urlHash(u) === hash) ?? null;
+}
+
 // --- Feed fetch timestamps ---
 
 export async function getLastFetchTime(feedUrl: string): Promise<Date | null> {
