@@ -8,6 +8,7 @@ import {
 import { fetchFeed } from '../../rss/fetcher';
 import { formatArticle } from '../../rss/formatter';
 import { translateArticle } from '../../translation';
+import type { Article } from '../../types';
 import type { Telegraf } from 'telegraf';
 
 const MAX_ARTICLES_PER_COMMAND = 5;
@@ -29,21 +30,23 @@ export async function handleNews(ctx: Context): Promise<void> {
   await ctx.reply('⏳ Завантажую новини…');
 
   const settings = await getUserSettings(chatId);
-  let sent = 0;
+
+  // Collect all articles to send first so we know which is last
+  const toSend: Array<{ article: Article; translated?: { title: string; summary: string } }> = [];
 
   for (const feed of feeds) {
-    if (sent >= MAX_ARTICLES_PER_COMMAND) break;
+    if (toSend.length >= MAX_ARTICLES_PER_COMMAND) break;
 
-    let articles;
+    let articles: Article[];
     try {
       const result = await fetchFeed(feed.url, null);
-      articles = result.articles.slice(0, MAX_ARTICLES_PER_COMMAND - sent);
+      articles = result.articles.slice(0, MAX_ARTICLES_PER_COMMAND - toSend.length);
     } catch {
       continue;
     }
 
     for (const article of articles) {
-      if (sent >= MAX_ARTICLES_PER_COMMAND) break;
+      if (toSend.length >= MAX_ARTICLES_PER_COMMAND) break;
       if (await isArticleSent(chatId, article.link)) continue;
 
       let translated: { title: string; summary: string } | undefined;
@@ -53,43 +56,46 @@ export async function handleNews(ctx: Context): Promise<void> {
         } catch { /* send without translation */ }
       }
 
-      const text = formatArticle(article, translated);
-      const isLast = sent === MAX_ARTICLES_PER_COMMAND - 1;
-      const keyboard = isLast ? refreshKeyboard() : undefined;
-
-      try {
-        if (article.imageUrl) {
-          await ctx.replyWithPhoto(article.imageUrl, {
-            caption: text,
-            parse_mode: 'HTML',
-            reply_markup: keyboard,
-          });
-        } else {
-          await ctx.replyWithHTML(text, {
-            link_preview_options: { is_disabled: true },
-            reply_markup: keyboard,
-          });
-        }
-        await markArticleSent(chatId, article.link);
-        sent++;
-      } catch {
-        // photo inaccessible — retry as text
-        try {
-          await ctx.replyWithHTML(text, {
-            link_preview_options: { is_disabled: true },
-            reply_markup: keyboard,
-          });
-          await markArticleSent(chatId, article.link);
-          sent++;
-        } catch { /* skip */ }
-      }
+      toSend.push({ article, translated });
     }
   }
 
-  if (sent === 0) {
+  if (toSend.length === 0) {
     await ctx.reply('Нових статей немає. Перевірте пізніше або додайте більше стрічок.', {
       reply_markup: refreshKeyboard(),
     });
+    return;
+  }
+
+  for (let i = 0; i < toSend.length; i++) {
+    const { article, translated } = toSend[i];
+    const text = formatArticle(article, translated);
+    const keyboard = i === toSend.length - 1 ? refreshKeyboard() : undefined;
+
+    try {
+      if (article.imageUrl) {
+        await ctx.replyWithPhoto(article.imageUrl, {
+          caption: text,
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        });
+      } else {
+        await ctx.replyWithHTML(text, {
+          link_preview_options: { is_disabled: true },
+          reply_markup: keyboard,
+        });
+      }
+      await markArticleSent(chatId, article.link);
+    } catch {
+      // photo inaccessible — retry as text
+      try {
+        await ctx.replyWithHTML(text, {
+          link_preview_options: { is_disabled: true },
+          reply_markup: keyboard,
+        });
+        await markArticleSent(chatId, article.link);
+      } catch { /* skip */ }
+    }
   }
 }
 

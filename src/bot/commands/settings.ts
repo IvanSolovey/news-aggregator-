@@ -37,22 +37,15 @@ export async function handleTranslate(ctx: Context): Promise<void> {
 // Called from bot/index.ts after answerCbQuery is already sent
 export async function handleTranslateCallback(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
-  if (!chatId) {
-    await ctx.answerCbQuery().catch(() => {});
-    return;
-  }
+  if (!chatId) return;
 
   if (!isTranslationAvailable()) {
-    await ctx.answerCbQuery('Переклад не налаштований.');
     return;
   }
 
   const settings = await getUserSettings(chatId);
   const newValue = !settings.translate;
   await setUserSettings(chatId, { translate: newValue });
-
-  const status = newValue ? '🌐 Переклад увімкнено' : '🔇 Переклад вимкнено';
-  await ctx.answerCbQuery(status);
 
   await ctx.editMessageText(translateText(newValue), {
     parse_mode: 'HTML',

@@ -31,9 +31,9 @@ export function createBot(): Telegraf {
   });
 
   bot.action('translate', async ctx => {
+    await ctx.answerCbQuery().catch(() => {});
     await handleTranslateCallback(ctx).catch(async err => {
       console.error('translate callback error:', err);
-      await ctx.answerCbQuery('Помилка. Спробуйте ще раз.').catch(() => {});
     });
   });
 
