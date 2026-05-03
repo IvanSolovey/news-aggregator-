@@ -2,15 +2,10 @@ import { Markup, type Context } from 'telegraf';
 import { registerUser } from '../../storage/redis';
 
 export function mainKeyboard() {
-  return Markup.inlineKeyboard([
-    [
-      Markup.button.callback('📰 Новини', 'news'),
-      Markup.button.callback('📋 Мої стрічки', 'list'),
-    ],
-    [
-      Markup.button.callback('🌐 Переклад', 'translate'),
-    ],
-  ]);
+  return Markup.keyboard([
+    ['/news', '/list'],
+    ['/translate'],
+  ]).resize();
 }
 
 export async function handleStart(ctx: Context): Promise<void> {

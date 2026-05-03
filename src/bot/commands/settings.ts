@@ -1,16 +1,11 @@
-import { Markup, type Context } from 'telegraf';
+import { type Context } from 'telegraf';
 import { getUserSettings, setUserSettings } from '../../storage/redis';
 import { isTranslationAvailable } from '../../translation';
 
-function translateKeyboard(isOn: boolean) {
-  const label = isOn ? '🔇 Вимкнути переклад' : '🌐 Увімкнути переклад';
-  return Markup.inlineKeyboard([[Markup.button.callback(label, 'translate')]]).reply_markup;
-}
-
 function translateText(isOn: boolean): string {
   return isOn
-    ? '🌐 Переклад на українську: <b>увімкнено</b>'
-    : '🔇 Переклад: <b>вимкнено</b>';
+    ? '🌐 Переклад на українську: <b>увімкнено</b>\n\nНатисніть /translate щоб вимкнути.'
+    : '🔇 Переклад: <b>вимкнено</b>\n\nНатисніть /translate щоб увімкнути.';
 }
 
 export async function handleTranslate(ctx: Context): Promise<void> {
@@ -29,26 +24,5 @@ export async function handleTranslate(ctx: Context): Promise<void> {
   const newValue = !settings.translate;
   await setUserSettings(chatId, { translate: newValue });
 
-  await ctx.replyWithHTML(translateText(newValue), {
-    reply_markup: translateKeyboard(newValue),
-  });
-}
-
-// Called from bot/index.ts after answerCbQuery is already sent
-export async function handleTranslateCallback(ctx: Context): Promise<void> {
-  const chatId = ctx.chat?.id;
-  if (!chatId) return;
-
-  if (!isTranslationAvailable()) {
-    return;
-  }
-
-  const settings = await getUserSettings(chatId);
-  const newValue = !settings.translate;
-  await setUserSettings(chatId, { translate: newValue });
-
-  await ctx.editMessageText(translateText(newValue), {
-    parse_mode: 'HTML',
-    reply_markup: translateKeyboard(newValue),
-  });
+  await ctx.replyWithHTML(translateText(newValue));
 }

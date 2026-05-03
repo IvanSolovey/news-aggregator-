@@ -1,23 +1,11 @@
-import { Markup, type Context } from 'telegraf';
+import { type Context } from 'telegraf';
 import {
   registerUser,
   addFeed,
   getUserFeeds,
   removeFeed,
-  feedUrlHash,
-  getFeedUrlByHash,
 } from '../../storage/redis';
 import { fetchFeed } from '../../rss/fetcher';
-import { mainKeyboard } from './start';
-
-function feedListKeyboard(feeds: { url: string; name: string }[]) {
-  const rows = feeds.map((f, i) => [
-    Markup.button.callback(`${i + 1}. ${f.name}`, 'noop'),
-    Markup.button.callback('❌', `rm:${feedUrlHash(f.url)}`),
-  ]);
-  rows.push([Markup.button.callback('📰 Отримати новини', 'news')]);
-  return Markup.inlineKeyboard(rows).reply_markup;
-}
 
 function isValidUrl(str: string): boolean {
   try {
@@ -45,14 +33,12 @@ export async function handleAdd(ctx: Context): Promise<void> {
   const existing = await getUserFeeds(chatId);
 
   if (existing.some(f => f.url === url)) {
-    await ctx.reply('Ця стрічка вже додана.', { reply_markup: feedListKeyboard(existing) });
+    await ctx.reply('Ця стрічка вже додана. Перегляньте список: /list');
     return;
   }
 
   if (existing.length >= 20) {
-    await ctx.reply('Максимальна кількість стрічок — 20. Спочатку видаліть зайві.', {
-      reply_markup: feedListKeyboard(existing),
-    });
+    await ctx.reply('Максимальна кількість стрічок — 20. Спочатку видаліть зайві: /list');
     return;
   }
 
@@ -68,11 +54,7 @@ export async function handleAdd(ctx: Context): Promise<void> {
   }
 
   await addFeed(chatId, url, feedName);
-
-  const updated = await getUserFeeds(chatId);
-  await ctx.replyWithHTML(`✅ Додано: <b>${feedName}</b>`, {
-    reply_markup: feedListKeyboard(updated),
-  });
+  await ctx.replyWithHTML(`✅ Додано: <b>${feedName}</b>`);
 }
 
 export async function handleList(ctx: Context): Promise<void> {
@@ -82,15 +64,13 @@ export async function handleList(ctx: Context): Promise<void> {
   const feeds = await getUserFeeds(chatId);
 
   if (feeds.length === 0) {
-    await ctx.reply('Ви не підписані на жодну стрічку.\nДодайте за допомогою /add <url>',
-      mainKeyboard()
-    );
+    await ctx.reply('Ви не підписані на жодну стрічку.\nДодайте за допомогою /add <url>');
     return;
   }
 
+  const lines = feeds.map((f, i) => `${i + 1}. ${f.name}`).join('\n');
   await ctx.replyWithHTML(
-    `📋 <b>Ваші RSS-стрічки (${feeds.length}):</b>\n\nНатисніть ❌ щоб видалити стрічку.`,
-    { reply_markup: feedListKeyboard(feeds) }
+    `📋 <b>Ваші RSS-стрічки (${feeds.length}):</b>\n\n${lines}\n\nДля видалення: /remove &lt;номер&gt;`
   );
 }
 
@@ -107,49 +87,12 @@ export async function handleRemove(ctx: Context): Promise<void> {
     await ctx.reply(
       feeds.length === 0
         ? 'У вас немає підписок.'
-        : `Вкажіть номер від 1 до ${feeds.length}.`,
-      feeds.length > 0
-        ? { reply_markup: feedListKeyboard(feeds) }
-        : mainKeyboard()
+        : `Вкажіть номер від 1 до ${feeds.length}.\nПерегляньте список: /list`
     );
     return;
   }
 
   const feed = feeds[num - 1];
   await removeFeed(chatId, feed.url);
-
-  const updated = await getUserFeeds(chatId);
-  await ctx.replyWithHTML(`🗑 Видалено: <b>${feed.name}</b>`, {
-    reply_markup: updated.length > 0 ? feedListKeyboard(updated) : mainKeyboard().reply_markup,
-  });
-}
-
-// Called from bot/index.ts after answerCbQuery is already sent
-export async function handleRemoveCallback(ctx: Context, hash: string): Promise<void> {
-  const chatId = ctx.chat?.id;
-  if (!chatId) return;
-
-  const url = await getFeedUrlByHash(chatId, hash);
-  if (!url) return;
-
-  const feeds = await getUserFeeds(chatId);
-  const feed = feeds.find(f => f.url === url);
-  await removeFeed(chatId, url);
-
-  const updated = await getUserFeeds(chatId);
-
-  if (updated.length === 0) {
-    await ctx.editMessageText('Список стрічок порожній.\nДодайте нову командою /add <url>', {
-      reply_markup: mainKeyboard().reply_markup,
-    });
-  } else {
-    await ctx.editMessageText(
-      `📋 <b>Ваші RSS-стрічки (${updated.length}):</b>\n\nНатисніть ❌ щоб видалити стрічку.`,
-      {
-        parse_mode: 'HTML',
-        reply_markup: feedListKeyboard(updated),
-      }
-    );
-  }
-
+  await ctx.replyWithHTML(`🗑 Видалено: <b>${feed.name}</b>`);
 }

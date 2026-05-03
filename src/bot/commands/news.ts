@@ -1,4 +1,4 @@
-import { Markup, type Context } from 'telegraf';
+import { type Context } from 'telegraf';
 import {
   getUserFeeds,
   getUserSettings,
@@ -12,10 +12,6 @@ import type { Article } from '../../types';
 import type { Telegraf } from 'telegraf';
 
 const MAX_ARTICLES_PER_COMMAND = 5;
-
-function refreshKeyboard() {
-  return Markup.inlineKeyboard([[Markup.button.callback('🔄 Оновити', 'news')]]).reply_markup;
-}
 
 export async function handleNews(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
@@ -31,7 +27,6 @@ export async function handleNews(ctx: Context): Promise<void> {
 
   const settings = await getUserSettings(chatId);
 
-  // Collect all articles to send first so we know which is last
   const toSend: Array<{ article: Article; translated?: { title: string; summary: string } }> = [];
 
   for (const feed of feeds) {
@@ -61,38 +56,24 @@ export async function handleNews(ctx: Context): Promise<void> {
   }
 
   if (toSend.length === 0) {
-    await ctx.reply('Нових статей немає. Перевірте пізніше або додайте більше стрічок.', {
-      reply_markup: refreshKeyboard(),
-    });
+    await ctx.reply('Нових статей немає. Перевірте пізніше або натисніть /news знову.');
     return;
   }
 
-  for (let i = 0; i < toSend.length; i++) {
-    const { article, translated } = toSend[i];
+  for (const { article, translated } of toSend) {
     const text = formatArticle(article, translated);
-    const keyboard = i === toSend.length - 1 ? refreshKeyboard() : undefined;
 
     try {
       if (article.imageUrl) {
-        await ctx.replyWithPhoto(article.imageUrl, {
-          caption: text,
-          parse_mode: 'HTML',
-          reply_markup: keyboard,
-        });
+        await ctx.replyWithPhoto(article.imageUrl, { caption: text, parse_mode: 'HTML' });
       } else {
-        await ctx.replyWithHTML(text, {
-          link_preview_options: { is_disabled: true },
-          reply_markup: keyboard,
-        });
+        await ctx.replyWithHTML(text, { link_preview_options: { is_disabled: true } });
       }
       await markArticleSent(chatId, article.link);
     } catch {
       // photo inaccessible — retry as text
       try {
-        await ctx.replyWithHTML(text, {
-          link_preview_options: { is_disabled: true },
-          reply_markup: keyboard,
-        });
+        await ctx.replyWithHTML(text, { link_preview_options: { is_disabled: true } });
         await markArticleSent(chatId, article.link);
       } catch { /* skip */ }
     }
