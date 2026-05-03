@@ -24,19 +24,20 @@ export function createBot(): Telegraf {
   bot.action(/^tr:(.+)$/, async (ctx) => {
     const hash = ctx.match[1];
 
+    // Answer Telegram immediately — prevents the 10-second spinning indicator
+    await ctx.answerCbQuery('⏳ Перекладаю…');
+
     const article = await getArticleForTranslation(hash);
     if (!article) {
-      await ctx.answerCbQuery('Стаття більше недоступна для перекладу.');
+      await ctx.reply('Стаття більше недоступна для перекладу (дані зберігаються 24 год).');
       return;
     }
-
-    await ctx.answerCbQuery('⏳ Перекладаю…');
 
     let translated: { title: string; summary: string };
     try {
       translated = await translateArticleViaClaude(article.title, article.summary);
     } catch {
-      await ctx.answerCbQuery('Помилка перекладу. Спробуйте пізніше.', { show_alert: true });
+      await ctx.reply('Помилка перекладу. Спробуйте пізніше.');
       return;
     }
 
