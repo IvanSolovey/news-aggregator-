@@ -1,5 +1,4 @@
 import { Markup, type Context } from 'telegraf';
-import type { InlineKeyboardMarkup } from 'telegraf/types';
 import {
   getUserFeeds,
   getUserSettings,
@@ -13,7 +12,7 @@ import type { Telegraf } from 'telegraf';
 
 const MAX_ARTICLES_PER_COMMAND = 5;
 
-function refreshKeyboard(): InlineKeyboardMarkup {
+function refreshKeyboard() {
   return Markup.inlineKeyboard([[Markup.button.callback('🔄 Оновити', 'news')]]).reply_markup;
 }
 

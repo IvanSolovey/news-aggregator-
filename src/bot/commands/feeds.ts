@@ -1,5 +1,4 @@
 import { Markup, type Context } from 'telegraf';
-import type { InlineKeyboardMarkup } from 'telegraf/types';
 import {
   registerUser,
   addFeed,
@@ -11,7 +10,7 @@ import {
 import { fetchFeed } from '../../rss/fetcher';
 import { mainKeyboard } from './start';
 
-function feedListKeyboard(feeds: { url: string; name: string }[]): InlineKeyboardMarkup {
+function feedListKeyboard(feeds: { url: string; name: string }[]) {
   const rows = feeds.map((f, i) => [
     Markup.button.callback(`${i + 1}. ${f.name}`, 'noop'),
     Markup.button.callback('❌', `rm:${feedUrlHash(f.url)}`),
@@ -83,9 +82,9 @@ export async function handleList(ctx: Context): Promise<void> {
   const feeds = await getUserFeeds(chatId);
 
   if (feeds.length === 0) {
-    await ctx.reply('Ви не підписані на жодну стрічку.\nДодайте за допомогою /add <url>', {
-      reply_markup: mainKeyboard().reply_markup,
-    });
+    await ctx.reply('Ви не підписані на жодну стрічку.\nДодайте за допомогою /add <url>',
+      mainKeyboard()
+    );
     return;
   }
 
@@ -111,7 +110,7 @@ export async function handleRemove(ctx: Context): Promise<void> {
         : `Вкажіть номер від 1 до ${feeds.length}.`,
       feeds.length > 0
         ? { reply_markup: feedListKeyboard(feeds) }
-        : { reply_markup: mainKeyboard().reply_markup }
+        : mainKeyboard()
     );
     return;
   }
@@ -153,5 +152,4 @@ export async function handleRemoveCallback(ctx: Context, hash: string): Promise<
     );
   }
 
-  void feed; // suppress unused variable warning
 }

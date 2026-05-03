@@ -1,9 +1,8 @@
 import { Markup, type Context } from 'telegraf';
-import type { InlineKeyboardMarkup } from 'telegraf/types';
 import { getUserSettings, setUserSettings } from '../../storage/redis';
 import { isTranslationAvailable } from '../../translation';
 
-function translateKeyboard(isOn: boolean): InlineKeyboardMarkup {
+function translateKeyboard(isOn: boolean) {
   const label = isOn ? '🔇 Вимкнути переклад' : '🌐 Увімкнути переклад';
   return Markup.inlineKeyboard([[Markup.button.callback(label, 'translate')]]).reply_markup;
 }
