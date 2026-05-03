@@ -1,8 +1,10 @@
 import * as deepl from 'deepl-node';
+import Anthropic from '@anthropic-ai/sdk';
 
 const TARGET_LANG = 'uk' as deepl.TargetLanguageCode;
 
 let deeplClient: deepl.Translator | null = null;
+let anthropicClient: Anthropic | null = null;
 
 function getDeepLClient(): deepl.Translator | null {
   if (!process.env.DEEPL_API_KEY) return null;
@@ -10,6 +12,14 @@ function getDeepLClient(): deepl.Translator | null {
     deeplClient = new deepl.Translator(process.env.DEEPL_API_KEY);
   }
   return deeplClient;
+}
+
+function getAnthropicClient(): Anthropic | null {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return anthropicClient;
 }
 
 async function translateViaDeepL(text: string): Promise<string> {
@@ -45,8 +55,51 @@ async function translateViaLibreTranslate(text: string): Promise<string> {
   return data.translatedText;
 }
 
+export async function translateArticleViaClaude(
+  title: string,
+  summary: string
+): Promise<{ title: string; summary: string }> {
+  const client = getAnthropicClient();
+  if (!client) throw new Error('ANTHROPIC_API_KEY is not set');
+
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: 1024,
+    messages: [
+      {
+        role: 'user',
+        content:
+          'Translate the following news article title and summary into Ukrainian. ' +
+          'Respond with a JSON object containing "title" and "summary" fields only. ' +
+          'Keep proper nouns, names, brands, and URLs unchanged.\n\n' +
+          `Title: ${title}\n` +
+          `Summary: ${summary}`,
+      },
+    ],
+  });
+
+  const raw = response.content[0].type === 'text' ? response.content[0].text : '';
+
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Claude returned unexpected format');
+
+  const parsed = JSON.parse(jsonMatch[0]) as { title?: string; summary?: string };
+  return {
+    title: parsed.title?.trim() || title,
+    summary: parsed.summary?.trim() || summary,
+  };
+}
+
 export function isTranslationAvailable(): boolean {
-  return Boolean(process.env.DEEPL_API_KEY || process.env.LIBRETRANSLATE_URL);
+  return Boolean(
+    process.env.DEEPL_API_KEY ||
+    process.env.LIBRETRANSLATE_URL ||
+    process.env.ANTHROPIC_API_KEY
+  );
+}
+
+export function isClaudeTranslationAvailable(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
 export async function translate(text: string): Promise<string> {
