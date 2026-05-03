@@ -19,9 +19,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // Respond to Telegram immediately — prevents retries and spinner timeout
-  res.status(200).json({ ok: true });
-
-  // await keeps the Vercel function alive until processing completes
-  await bot.handleUpdate(req.body).catch(err => console.error('Webhook error:', err));
+  try {
+    await bot.handleUpdate(req.body);
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('Webhook error:', err);
+    res.status(200).json({ ok: false });
+  }
 }
