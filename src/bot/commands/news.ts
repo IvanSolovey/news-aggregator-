@@ -1,17 +1,34 @@
-import { type Context } from 'telegraf';
+import { Markup, type Context } from 'telegraf';
+import { createHash } from 'crypto';
 import {
   getUserFeeds,
   getUserSettings,
   isArticleSent,
   markArticleSent,
+  storeArticleForTranslation,
 } from '../../storage/redis';
 import { fetchFeed } from '../../rss/fetcher';
 import { formatArticle } from '../../rss/formatter';
-import { translateArticle } from '../../translation';
+import { translateArticle, isClaudeTranslationAvailable } from '../../translation';
 import type { Article } from '../../types';
 import type { Telegraf } from 'telegraf';
 
 const MAX_ARTICLES_PER_COMMAND = 5;
+
+// ї is exclusively Ukrainian — reliable enough for our purposes
+function isLikelyUkrainian(text: string): boolean {
+  return /[їЇєЄґҐ]/.test(text);
+}
+
+export function articleHash(link: string): string {
+  return createHash('md5').update(link).digest('hex').slice(0, 12);
+}
+
+export function translateKeyboard(hash: string) {
+  return Markup.inlineKeyboard([[
+    Markup.button.callback('🌐 Перекласти', `tr:${hash}`),
+  ]]);
+}
 
 export async function handleNews(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
@@ -62,18 +79,39 @@ export async function handleNews(ctx: Context): Promise<void> {
 
   for (const { article, translated } of toSend) {
     const text = formatArticle(article, translated);
+    const hash = articleHash(article.link);
+    const showButton = isClaudeTranslationAvailable() && !translated &&
+      !isLikelyUkrainian(article.title + ' ' + article.summary);
+
+    await storeArticleForTranslation(hash, {
+      title: article.title,
+      summary: article.summary,
+      link: article.link,
+      feedName: article.feedName,
+      imageUrl: article.imageUrl,
+    });
 
     try {
       if (article.imageUrl) {
-        await ctx.replyWithPhoto(article.imageUrl, { caption: text, parse_mode: 'HTML' });
+        await ctx.replyWithPhoto(article.imageUrl, {
+          caption: text,
+          parse_mode: 'HTML',
+          ...(showButton ? translateKeyboard(hash) : {}),
+        });
       } else {
-        await ctx.replyWithHTML(text, { link_preview_options: { is_disabled: true } });
+        await ctx.replyWithHTML(text, {
+          link_preview_options: { is_disabled: true },
+          ...(showButton ? translateKeyboard(hash) : {}),
+        });
       }
       await markArticleSent(chatId, article.link);
     } catch {
       // photo inaccessible — retry as text
       try {
-        await ctx.replyWithHTML(text, { link_preview_options: { is_disabled: true } });
+        await ctx.replyWithHTML(text, {
+          link_preview_options: { is_disabled: true },
+          ...(showButton ? translateKeyboard(hash) : {}),
+        });
         await markArticleSent(chatId, article.link);
       } catch { /* skip */ }
     }
@@ -88,7 +126,7 @@ export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise
   ]);
 
   for (const feed of feeds) {
-    let articles;
+    let articles: Article[];
     try {
       const result = await fetchFeed(feed.url, null);
       articles = result.articles;
@@ -107,17 +145,32 @@ export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise
       }
 
       const text = formatArticle(article, translated);
+      const hash = articleHash(article.link);
+      const showButton = isClaudeTranslationAvailable() && !translated &&
+      !isLikelyUkrainian(article.title + ' ' + article.summary);
+
+      await storeArticleForTranslation(hash, {
+        title: article.title,
+        summary: article.summary,
+        link: article.link,
+        feedName: article.feedName,
+        imageUrl: article.imageUrl,
+      });
+
+      const replyMarkup = showButton ? translateKeyboard(hash).reply_markup : undefined;
 
       try {
         if (article.imageUrl) {
           await bot.telegram.sendPhoto(chatId, article.imageUrl, {
             caption: text,
             parse_mode: 'HTML',
+            reply_markup: replyMarkup,
           });
         } else {
           await bot.telegram.sendMessage(chatId, text, {
             parse_mode: 'HTML',
             link_preview_options: { is_disabled: true },
+            reply_markup: replyMarkup,
           });
         }
         await markArticleSent(chatId, article.link);
@@ -128,6 +181,7 @@ export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise
           await bot.telegram.sendMessage(chatId, text, {
             parse_mode: 'HTML',
             link_preview_options: { is_disabled: true },
+            reply_markup: replyMarkup,
           });
           await markArticleSent(chatId, article.link);
         } catch { /* skip */ }

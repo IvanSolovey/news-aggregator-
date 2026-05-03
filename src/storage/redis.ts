@@ -88,6 +88,38 @@ export async function getFeedUrlByHash(chatId: number, hash: string): Promise<st
   return urls.find(u => urlHash(u) === hash) ?? null;
 }
 
+// --- Article translation cache ---
+
+const ARTICLE_TTL = 60 * 60 * 24; // 24 hours
+
+export interface ArticleTranslationData {
+  title: string;
+  summary: string;
+  link: string;
+  feedName: string;
+  imageUrl?: string;
+}
+
+export async function storeArticleForTranslation(
+  hash: string,
+  data: ArticleTranslationData
+): Promise<void> {
+  await redis.set(`article:${hash}`, JSON.stringify(data), { ex: ARTICLE_TTL });
+}
+
+export async function getArticleForTranslation(
+  hash: string
+): Promise<ArticleTranslationData | null> {
+  const raw = await redis.get<string | ArticleTranslationData>(`article:${hash}`);
+  if (!raw) return null;
+  if (typeof raw === 'object') return raw as ArticleTranslationData;
+  try {
+    return JSON.parse(raw) as ArticleTranslationData;
+  } catch {
+    return null;
+  }
+}
+
 // --- Feed fetch timestamps ---
 
 export async function getLastFetchTime(feedUrl: string): Promise<Date | null> {
