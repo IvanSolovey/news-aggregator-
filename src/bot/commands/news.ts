@@ -15,6 +15,11 @@ import type { Telegraf } from 'telegraf';
 
 const MAX_ARTICLES_PER_COMMAND = 5;
 
+// ї is exclusively Ukrainian — reliable enough for our purposes
+function isLikelyUkrainian(text: string): boolean {
+  return /[їЇєЄґҐ]/.test(text);
+}
+
 export function articleHash(link: string): string {
   return createHash('md5').update(link).digest('hex').slice(0, 12);
 }
@@ -75,7 +80,8 @@ export async function handleNews(ctx: Context): Promise<void> {
   for (const { article, translated } of toSend) {
     const text = formatArticle(article, translated);
     const hash = articleHash(article.link);
-    const showButton = isClaudeTranslationAvailable() && !translated;
+    const showButton = isClaudeTranslationAvailable() && !translated &&
+      !isLikelyUkrainian(article.title + ' ' + article.summary);
 
     await storeArticleForTranslation(hash, {
       title: article.title,
@@ -140,7 +146,8 @@ export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise
 
       const text = formatArticle(article, translated);
       const hash = articleHash(article.link);
-      const showButton = isClaudeTranslationAvailable() && !translated;
+      const showButton = isClaudeTranslationAvailable() && !translated &&
+      !isLikelyUkrainian(article.title + ' ' + article.summary);
 
       await storeArticleForTranslation(hash, {
         title: article.title,
