@@ -4,6 +4,7 @@ import {
   getUserFeeds,
   getUserSettings,
   isArticleSent,
+  filterUnsentArticles,
   markArticleSent,
   storeArticleForTranslation,
 } from '../../storage/redis';
@@ -134,9 +135,9 @@ export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise
       continue;
     }
 
-    for (const article of articles) {
-      if (await isArticleSent(chatId, article.link)) continue;
+    const unsentArticles = await filterUnsentArticles(chatId, articles);
 
+    for (const article of unsentArticles) {
       let translated: { title: string; summary: string } | undefined;
       if (settings.translate && article.summary) {
         try {
