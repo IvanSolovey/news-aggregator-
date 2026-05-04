@@ -4,6 +4,15 @@ import { createBot } from '../src/bot';
 const bot = createBot();
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  // Log every incoming request immediately — before any validation
+  const updateType = req.body?.message ? 'message'
+    : req.body?.callback_query ? 'callback_query'
+    : req.body ? (Object.keys(req.body).find(k => k !== 'update_id') ?? 'unknown')
+    : `${req.method} (no body)`;
+  console.log(`[webhook] ${updateType}` +
+    (req.body?.callback_query ? ` data="${req.body.callback_query.data}"` : '') +
+    ` secret_present=${!!req.headers['x-telegram-bot-api-secret-token']}`);
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -18,12 +27,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
-
-  const updateType = req.body.message ? 'message'
-    : req.body.callback_query ? 'callback_query'
-    : Object.keys(req.body).find(k => k !== 'update_id') ?? 'unknown';
-  console.log(`[webhook] update_id=${req.body.update_id} type=${updateType}` +
-    (req.body.callback_query ? ` data="${req.body.callback_query.data}"` : ''));
 
   try {
     await bot.handleUpdate(req.body);
