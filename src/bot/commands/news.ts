@@ -7,7 +7,7 @@ import { translateArticle, isClaudeTranslationAvailable } from '../../translatio
 import type { Article } from '../../types';
 import type { Telegraf } from 'telegraf';
 
-const MAX_ARTICLES_PER_COMMAND = 5;
+const MAX_ARTICLES_PER_FEED = 3;
 const NEWS_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function isLikelyUkrainian(text: string): boolean {
@@ -40,17 +40,16 @@ export async function handleNews(ctx: Context): Promise<void> {
   const toSend: Array<{ article: Article; translated?: { title: string; summary: string }; feedUrl: string }> = [];
 
   for (const feed of feeds) {
-    if (toSend.length >= MAX_ARTICLES_PER_COMMAND) break;
+    if (toSend.length >= MAX_ARTICLES_PER_FEED * feeds.length) break;
     let articles: Article[];
     try {
       const result = await fetchFeed(feed.url, since);
-      articles = result.articles.slice(0, MAX_ARTICLES_PER_COMMAND - toSend.length);
+      articles = result.articles.slice(0, MAX_ARTICLES_PER_FEED);
     } catch {
       continue;
     }
 
     for (const article of articles) {
-      if (toSend.length >= MAX_ARTICLES_PER_COMMAND) break;
       if (seenLinks.has(article.link)) continue;
       seenLinks.add(article.link);
 
@@ -112,7 +111,7 @@ export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise
     let articles: Article[];
     try {
       const result = await fetchFeed(feed.url, since);
-      articles = result.articles;
+      articles = result.articles.slice(0, MAX_ARTICLES_PER_FEED);
     } catch {
       continue;
     }
