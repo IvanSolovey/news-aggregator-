@@ -34,3 +34,13 @@ export async function saveChatId(chatId: number): Promise<void> {
 export async function getStoredChatId(): Promise<number | null> {
   return redis.get<number>(CHAT_ID_KEY);
 }
+
+const SENT_TTL = 60 * 60 * 24 * 7; // 7 days
+
+export async function isArticleSent(articleHash: string): Promise<boolean> {
+  return (await redis.get(`sent:${articleHash}`)) !== null;
+}
+
+export async function markArticleSent(articleHash: string): Promise<void> {
+  await redis.set(`sent:${articleHash}`, 1, { ex: SENT_TTL });
+}

@@ -1,5 +1,5 @@
 import { Markup, type Context } from 'telegraf';
-import { getFeeds } from '../../storage/feeds';
+import { getFeeds, isArticleSent, markArticleSent } from '../../storage/feeds';
 import { isAutoTranslate, shortHash } from '../../config';
 import { fetchFeed } from '../../rss/fetcher';
 import { formatArticle } from '../../rss/formatter';
@@ -7,7 +7,6 @@ import { translateArticle, isClaudeTranslationAvailable } from '../../translatio
 import type { Article } from '../../types';
 import type { Telegraf } from 'telegraf';
 
-const MAX_ARTICLES_PER_FEED = 3;
 const NEWS_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function isLikelyUkrainian(text: string): boolean {
@@ -24,6 +23,7 @@ export function translateKeyboard(feedHash: string, artHash: string) {
   ]]);
 }
 
+
 export async function handleNews(ctx: Context): Promise<void> {
   const feeds = await getFeeds();
   if (feeds.length === 0) {
@@ -35,68 +35,48 @@ export async function handleNews(ctx: Context): Promise<void> {
 
   const since = new Date(Date.now() - NEWS_WINDOW_MS);
   const autoTranslate = isAutoTranslate();
-  const seenLinks = new Set<string>();
-
-  const toSend: Array<{ article: Article; translated?: { title: string; summary: string }; feedUrl: string }> = [];
+  let sent = 0;
 
   for (const feed of feeds) {
-    if (toSend.length >= MAX_ARTICLES_PER_FEED * feeds.length) break;
     let articles: Article[];
     try {
       const result = await fetchFeed(feed.url, since);
-      articles = result.articles.slice(0, MAX_ARTICLES_PER_FEED);
+      articles = result.articles;
     } catch {
       continue;
     }
 
     for (const article of articles) {
-      if (seenLinks.has(article.link)) continue;
-      seenLinks.add(article.link);
+      const hash = articleHash(article.link);
+      if (await isArticleSent(hash)) continue;
 
       let translated: { title: string; summary: string } | undefined;
       if (autoTranslate && article.summary) {
-        try {
-          translated = await translateArticle(article.title, article.summary);
-        } catch { /* send without translation */ }
+        try { translated = await translateArticle(article.title, article.summary); } catch { /* skip */ }
       }
 
-      toSend.push({ article, translated, feedUrl: feed.url });
-    }
-  }
+      const text = formatArticle(article, translated);
+      const feedHash = shortHash(feed.url);
+      const showButton = isClaudeTranslationAvailable() && !translated &&
+        !isLikelyUkrainian(article.title + ' ' + article.summary);
+      const keyboard = showButton ? translateKeyboard(feedHash, hash) : {};
 
-  if (toSend.length === 0) {
-    await ctx.reply('Нових статей за останні 24 години немає.');
-    return;
-  }
-
-  for (const { article, translated, feedUrl } of toSend) {
-    const text = formatArticle(article, translated);
-    const feedHash = shortHash(feedUrl);
-    const artHash = articleHash(article.link);
-    const showButton = isClaudeTranslationAvailable() && !translated &&
-      !isLikelyUkrainian(article.title + ' ' + article.summary);
-
-    try {
-      if (article.imageUrl) {
-        await ctx.replyWithPhoto(article.imageUrl, {
-          caption: text,
-          parse_mode: 'HTML',
-          ...(showButton ? translateKeyboard(feedHash, artHash) : {}),
-        });
-      } else {
-        await ctx.replyWithHTML(text, {
-          link_preview_options: { is_disabled: true },
-          ...(showButton ? translateKeyboard(feedHash, artHash) : {}),
-        });
-      }
-    } catch {
       try {
-        await ctx.replyWithHTML(text, {
-          link_preview_options: { is_disabled: true },
-          ...(showButton ? translateKeyboard(feedHash, artHash) : {}),
-        });
-      } catch { /* skip */ }
+        if (article.imageUrl) {
+          await ctx.replyWithPhoto(article.imageUrl, { caption: text, parse_mode: 'HTML', ...keyboard });
+        } else {
+          await ctx.replyWithHTML(text, { link_preview_options: { is_disabled: true }, ...keyboard });
+        }
+      } catch {
+        await ctx.replyWithHTML(text, { link_preview_options: { is_disabled: true }, ...keyboard }).catch(() => {});
+      }
+      await markArticleSent(hash);
+      sent++;
     }
+  }
+
+  if (sent === 0) {
+    await ctx.reply('Нових статей немає. Всі вже були надіслані раніше.');
   }
 }
 
@@ -105,26 +85,23 @@ export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise
   const feeds = await getFeeds();
   const since = new Date(Date.now() - NEWS_WINDOW_MS);
   const autoTranslate = isAutoTranslate();
-  const seenLinks = new Set<string>();
 
   for (const feed of feeds) {
     let articles: Article[];
     try {
       const result = await fetchFeed(feed.url, since);
-      articles = result.articles.slice(0, MAX_ARTICLES_PER_FEED);
+      articles = result.articles;
     } catch {
       continue;
     }
 
     for (const article of articles) {
-      if (seenLinks.has(article.link)) continue;
-      seenLinks.add(article.link);
+      const hash = articleHash(article.link);
+      if (await isArticleSent(hash)) continue;
 
       let translated: { title: string; summary: string } | undefined;
       if (autoTranslate && article.summary) {
-        try {
-          translated = await translateArticle(article.title, article.summary);
-        } catch { /* send without translation */ }
+        try { translated = await translateArticle(article.title, article.summary); } catch { /* skip */ }
       }
 
       const text = formatArticle(article, translated);
@@ -132,34 +109,27 @@ export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise
       const artHash = articleHash(article.link);
       const showButton = isClaudeTranslationAvailable() && !translated &&
         !isLikelyUkrainian(article.title + ' ' + article.summary);
-
-      const replyMarkup = showButton
-        ? translateKeyboard(feedHash, artHash).reply_markup
-        : undefined;
+      const replyMarkup = showButton ? translateKeyboard(feedHash, artHash).reply_markup : undefined;
 
       try {
         if (article.imageUrl) {
           await bot.telegram.sendPhoto(chatId, article.imageUrl, {
-            caption: text,
-            parse_mode: 'HTML',
-            reply_markup: replyMarkup,
+            caption: text, parse_mode: 'HTML', reply_markup: replyMarkup,
           });
         } else {
           await bot.telegram.sendMessage(chatId, text, {
-            parse_mode: 'HTML',
-            link_preview_options: { is_disabled: true },
-            reply_markup: replyMarkup,
+            parse_mode: 'HTML', link_preview_options: { is_disabled: true }, reply_markup: replyMarkup,
           });
         }
+        await markArticleSent(hash);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : '';
         if (msg.includes('bot was blocked') || msg.includes('chat not found')) return;
         try {
           await bot.telegram.sendMessage(chatId, text, {
-            parse_mode: 'HTML',
-            link_preview_options: { is_disabled: true },
-            reply_markup: replyMarkup,
+            parse_mode: 'HTML', link_preview_options: { is_disabled: true }, reply_markup: replyMarkup,
           });
+          await markArticleSent(hash);
         } catch { /* skip */ }
       }
     }
