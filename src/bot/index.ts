@@ -1,9 +1,10 @@
 import { Telegraf } from 'telegraf';
 import { handleStart } from './commands/start';
-import { handleList } from './commands/feeds';
+import { handleAdd, handleList, handleRemove } from './commands/feeds';
 import { handleTranslate } from './commands/settings';
 import { handleNews, articleHash } from './commands/news';
-import { getConfiguredFeeds, shortHash } from '../config';
+import { getFeeds } from '../storage/feeds';
+import { shortHash } from '../config';
 import { fetchFeed } from '../rss/fetcher';
 import { translateArticleViaClaude } from '../translation';
 import { formatArticle } from '../rss/formatter';
@@ -16,7 +17,9 @@ export function createBot(): Telegraf {
 
   bot.command('start', handleStart);
   bot.command('help', handleStart);
+  bot.command('add', handleAdd);
   bot.command('list', handleList);
+  bot.command('remove', handleRemove);
   bot.command('translate', handleTranslate);
   bot.command('news', handleNews);
 
@@ -28,14 +31,14 @@ export function createBot(): Telegraf {
     await ctx.answerCbQuery('⏳ Перекладаю…');
 
     try {
-      const feeds = getConfiguredFeeds();
-      const feedUrl = feeds.find(u => shortHash(u) === feedHash);
-      if (!feedUrl) {
-        await ctx.reply('Стрічка більше не налаштована.');
+      const feeds = await getFeeds();
+      const feed = feeds.find(f => shortHash(f.url) === feedHash);
+      if (!feed) {
+        await ctx.reply('Стрічку видалено зі списку підписок.');
         return;
       }
 
-      const result = await fetchFeed(feedUrl, null);
+      const result = await fetchFeed(feed.url, null);
       const article = result.articles.find(a => articleHash(a.link) === artHash);
       if (!article) {
         await ctx.reply('Стаття більше недоступна в стрічці.');

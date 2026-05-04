@@ -1,5 +1,6 @@
 import { Markup, type Context } from 'telegraf';
-import { getConfiguredFeeds, isAutoTranslate, shortHash } from '../../config';
+import { getFeeds } from '../../storage/feeds';
+import { isAutoTranslate, shortHash } from '../../config';
 import { fetchFeed } from '../../rss/fetcher';
 import { formatArticle } from '../../rss/formatter';
 import { translateArticle, isClaudeTranslationAvailable } from '../../translation';
@@ -9,7 +10,6 @@ import type { Telegraf } from 'telegraf';
 const MAX_ARTICLES_PER_COMMAND = 5;
 const NEWS_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-// ї is exclusively Ukrainian — reliable enough for our purposes
 function isLikelyUkrainian(text: string): boolean {
   return /[їЇєЄґҐ]/.test(text);
 }
@@ -25,9 +25,9 @@ export function translateKeyboard(feedHash: string, artHash: string) {
 }
 
 export async function handleNews(ctx: Context): Promise<void> {
-  const feeds = getConfiguredFeeds();
+  const feeds = await getFeeds();
   if (feeds.length === 0) {
-    await ctx.reply('Не налаштовано жодної стрічки. Додайте RSS_FEEDS до змінних оточення.');
+    await ctx.reply('Ви не підписані на жодну стрічку.\nДодайте за допомогою /add <url>');
     return;
   }
 
@@ -39,11 +39,11 @@ export async function handleNews(ctx: Context): Promise<void> {
 
   const toSend: Array<{ article: Article; translated?: { title: string; summary: string }; feedUrl: string }> = [];
 
-  for (const feedUrl of feeds) {
+  for (const feed of feeds) {
     if (toSend.length >= MAX_ARTICLES_PER_COMMAND) break;
     let articles: Article[];
     try {
-      const result = await fetchFeed(feedUrl, since);
+      const result = await fetchFeed(feed.url, since);
       articles = result.articles.slice(0, MAX_ARTICLES_PER_COMMAND - toSend.length);
     } catch {
       continue;
@@ -61,7 +61,7 @@ export async function handleNews(ctx: Context): Promise<void> {
         } catch { /* send without translation */ }
       }
 
-      toSend.push({ article, translated, feedUrl });
+      toSend.push({ article, translated, feedUrl: feed.url });
     }
   }
 
@@ -91,7 +91,6 @@ export async function handleNews(ctx: Context): Promise<void> {
         });
       }
     } catch {
-      // photo inaccessible — retry as text
       try {
         await ctx.replyWithHTML(text, {
           link_preview_options: { is_disabled: true },
@@ -104,15 +103,15 @@ export async function handleNews(ctx: Context): Promise<void> {
 
 // Used by the cron job
 export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise<void> {
-  const feeds = getConfiguredFeeds();
+  const feeds = await getFeeds();
   const since = new Date(Date.now() - NEWS_WINDOW_MS);
   const autoTranslate = isAutoTranslate();
   const seenLinks = new Set<string>();
 
-  for (const feedUrl of feeds) {
+  for (const feed of feeds) {
     let articles: Article[];
     try {
-      const result = await fetchFeed(feedUrl, since);
+      const result = await fetchFeed(feed.url, since);
       articles = result.articles;
     } catch {
       continue;
@@ -130,7 +129,7 @@ export async function deliverNewArticles(bot: Telegraf, chatId: number): Promise
       }
 
       const text = formatArticle(article, translated);
-      const feedHash = shortHash(feedUrl);
+      const feedHash = shortHash(feed.url);
       const artHash = articleHash(article.link);
       const showButton = isClaudeTranslationAvailable() && !translated &&
         !isLikelyUkrainian(article.title + ' ' + article.summary);

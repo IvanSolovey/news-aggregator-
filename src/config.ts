@@ -1,10 +1,5 @@
 import { createHash } from 'crypto';
 
-export function getConfiguredFeeds(): string[] {
-  const raw = process.env.RSS_FEEDS ?? '';
-  return raw.split(',').map(s => s.trim()).filter(Boolean);
-}
-
 export function isAutoTranslate(): boolean {
   return process.env.AUTO_TRANSLATE === 'true';
 }
