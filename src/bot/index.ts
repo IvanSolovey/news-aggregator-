@@ -23,22 +23,34 @@ export function createBot(): Telegraf {
   bot.command('translate', handleTranslate);
   bot.command('news', handleNews);
 
-  // Backward compat: old buttons used a single hash (tr:<hash>)
-  bot.action(/^tr:[a-f0-9]{12}$/, async (ctx) => {
-    await ctx.answerCbQuery('Надішліть /news ще раз — формат кнопок оновлено.').catch(() => {});
-  });
+  // Handle all tr:* callback queries in one handler to avoid regex issues
+  bot.action(/^tr:/, async (ctx) => {
+    const data = (ctx.callbackQuery as { data?: string }).data ?? '';
+    console.log(`[bot.action] tr: handler reached, data="${data}"`);
 
-  // Current format: tr:<feedHash>:<articleHash>
-  bot.action(/^tr:([a-f0-9]{12}):([a-f0-9]{12})$/, async (ctx) => {
-    const feedHash = ctx.match[1];
-    const artHash = ctx.match[2];
+    await ctx.answerCbQuery('⏳ Перекладаю…').catch((e: unknown) => {
+      console.error('[bot.action] answerCbQuery failed:', e);
+    });
 
-    try {
-      await ctx.answerCbQuery('⏳ Перекладаю…');
-    } catch { /* callback query expired — continue anyway */ }
+    const parts = data.split(':');
+
+    // Old format: tr:<hash> — can no longer translate, data lost
+    if (parts.length === 2) {
+      await ctx.reply('Надішліть /news ще раз — формат кнопок оновлено.').catch(() => {});
+      return;
+    }
+
+    if (parts.length !== 3) {
+      await ctx.reply('Невідомий формат кнопки.').catch(() => {});
+      return;
+    }
+
+    const [, feedHash, artHash] = parts;
 
     try {
       const feeds = await getFeeds();
+      console.log(`[bot.action] feeds count=${feeds.length}, looking for feedHash=${feedHash}`);
+
       const feed = feeds.find(f => shortHash(f.url) === feedHash);
       if (!feed) {
         await ctx.reply('Стрічку видалено зі списку підписок.');
@@ -55,7 +67,8 @@ export function createBot(): Telegraf {
       let translated: { title: string; summary: string };
       try {
         translated = await translateArticleViaClaude(article.title, article.summary);
-      } catch {
+      } catch (e) {
+        console.error('[bot.action] translation error:', e);
         await ctx.reply('Помилка перекладу. Спробуйте пізніше.');
         return;
       }
@@ -77,8 +90,9 @@ export function createBot(): Telegraf {
             reply_markup: { inline_keyboard: [] },
           });
         }
-      } catch { /* editing may fail if content is identical — ignore */ }
-    } catch {
+      } catch { /* ignore if content identical */ }
+    } catch (e) {
+      console.error('[bot.action] outer error:', e);
       await ctx.reply('Технічна помилка. Спробуйте пізніше.').catch(() => {});
     }
   });
