@@ -1,16 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createBot } from '../src/bot';
-import { getChatId } from '../src/config';
+import { getStoredChatId } from '../src/storage/feeds';
 import { deliverNewArticles } from '../src/bot/commands/news';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  // Allow GET (cron-job.org) and POST (Vercel built-in cron)
   if (req.method !== 'GET' && req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
 
-  // Protect with a shared secret
   const secret =
     (req.query.secret as string | undefined) ??
     req.headers['x-cron-secret'];
@@ -20,8 +18,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
+  const chatId = await getStoredChatId();
+  if (!chatId) {
+    console.log('Cron: no chat ID registered — send /start to the bot first');
+    res.status(200).json({ ok: true, skipped: true });
+    return;
+  }
+
   const bot = createBot();
-  const chatId = getChatId();
 
   try {
     await deliverNewArticles(bot, chatId);
