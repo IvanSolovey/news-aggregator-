@@ -43,7 +43,7 @@ export async function getUserFeeds(chatId: number): Promise<FeedInfo[]> {
   if (urls.length === 0) return [];
 
   const nameKeys = urls.map(u => `feed:${urlHash(u)}:name`);
-  const names = await Promise.all(nameKeys.map(k => redis.get<string>(k)));
+  const names = await redis.mget<(string | null)[]>(...nameKeys);
 
   return urls.map((url, i) => ({ url, name: names[i] ?? url }));
 }
@@ -72,6 +72,16 @@ export async function isArticleSent(chatId: number, articleUrl: string): Promise
   const key = `sent:${chatId}:${urlHash(articleUrl)}`;
   const val = await redis.get(key);
   return val !== null;
+}
+
+export async function filterUnsentArticles<T extends { link: string }>(
+  chatId: number,
+  articles: T[],
+): Promise<T[]> {
+  if (articles.length === 0) return [];
+  const keys = articles.map(a => `sent:${chatId}:${urlHash(a.link)}`);
+  const vals = await redis.mget<(string | null)[]>(...keys);
+  return articles.filter((_, i) => vals[i] === null);
 }
 
 export async function markArticleSent(chatId: number, articleUrl: string): Promise<void> {

@@ -27,46 +27,50 @@ export function createBot(): Telegraf {
     // Answer Telegram immediately — prevents the 10-second spinning indicator
     await ctx.answerCbQuery('⏳ Перекладаю…');
 
-    const article = await getArticleForTranslation(hash);
-    if (!article) {
-      await ctx.reply('Стаття більше недоступна для перекладу (дані зберігаються 24 год).');
-      return;
-    }
-
-    let translated: { title: string; summary: string };
     try {
-      translated = await translateArticleViaClaude(article.title, article.summary);
-    } catch {
-      await ctx.reply('Помилка перекладу. Спробуйте пізніше.');
-      return;
-    }
-
-    const fakeArticle = {
-      title: article.title,
-      link: article.link,
-      summary: article.summary,
-      feedName: article.feedName,
-      feedUrl: '',
-    };
-    const translatedText = formatArticle(fakeArticle, translated);
-
-    const msg = ctx.callbackQuery.message;
-    if (!msg) return;
-
-    try {
-      if ('photo' in msg && msg.photo) {
-        await ctx.editMessageCaption(translatedText, {
-          parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: [] },
-        });
-      } else {
-        await ctx.editMessageText(translatedText, {
-          parse_mode: 'HTML',
-          link_preview_options: { is_disabled: true },
-          reply_markup: { inline_keyboard: [] },
-        });
+      const article = await getArticleForTranslation(hash);
+      if (!article) {
+        await ctx.reply('Стаття більше недоступна для перекладу (дані зберігаються 24 год).');
+        return;
       }
-    } catch { /* editing may fail if content is identical — ignore */ }
+
+      let translated: { title: string; summary: string };
+      try {
+        translated = await translateArticleViaClaude(article.title, article.summary);
+      } catch {
+        await ctx.reply('Помилка перекладу. Спробуйте пізніше.');
+        return;
+      }
+
+      const fakeArticle = {
+        title: article.title,
+        link: article.link,
+        summary: article.summary,
+        feedName: article.feedName,
+        feedUrl: '',
+      };
+      const translatedText = formatArticle(fakeArticle, translated);
+
+      const msg = ctx.callbackQuery.message;
+      if (!msg) return;
+
+      try {
+        if ('photo' in msg && msg.photo) {
+          await ctx.editMessageCaption(translatedText, {
+            parse_mode: 'HTML',
+            reply_markup: { inline_keyboard: [] },
+          });
+        } else {
+          await ctx.editMessageText(translatedText, {
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+            reply_markup: { inline_keyboard: [] },
+          });
+        }
+      } catch { /* editing may fail if content is identical — ignore */ }
+    } catch {
+      await ctx.reply('Технічна помилка. Спробуйте пізніше.').catch(() => {});
+    }
   });
 
   bot.on('message', ctx =>
