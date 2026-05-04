@@ -1,8 +1,8 @@
 import { Redis } from '@upstash/redis';
 
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
 });
 
 export interface FeedInfo {
@@ -10,18 +10,27 @@ export interface FeedInfo {
   name: string;
 }
 
-const KEY = 'feeds';
+const FEEDS_KEY = 'feeds';
+const CHAT_ID_KEY = 'chat_id';
 
 export async function addFeed(url: string, name: string): Promise<void> {
-  await redis.hset(KEY, { [url]: name });
+  await redis.hset(FEEDS_KEY, { [url]: name });
 }
 
 export async function removeFeed(url: string): Promise<void> {
-  await redis.hdel(KEY, url);
+  await redis.hdel(FEEDS_KEY, url);
 }
 
 export async function getFeeds(): Promise<FeedInfo[]> {
-  const data = await redis.hgetall<Record<string, string>>(KEY);
+  const data = await redis.hgetall<Record<string, string>>(FEEDS_KEY);
   if (!data) return [];
   return Object.entries(data).map(([url, name]) => ({ url, name }));
+}
+
+export async function saveChatId(chatId: number): Promise<void> {
+  await redis.set(CHAT_ID_KEY, chatId);
+}
+
+export async function getStoredChatId(): Promise<number | null> {
+  return redis.get<number>(CHAT_ID_KEY);
 }
