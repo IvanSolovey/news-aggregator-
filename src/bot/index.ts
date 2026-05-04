@@ -1,9 +1,10 @@
 import { Telegraf } from 'telegraf';
 import { handleStart } from './commands/start';
-import { handleAdd, handleList, handleRemove } from './commands/feeds';
+import { handleList } from './commands/feeds';
 import { handleTranslate } from './commands/settings';
-import { handleNews } from './commands/news';
-import { getArticleForTranslation } from '../storage/redis';
+import { handleNews, articleHash } from './commands/news';
+import { getConfiguredFeeds, shortHash } from '../config';
+import { fetchFeed } from '../rss/fetcher';
 import { translateArticleViaClaude } from '../translation';
 import { formatArticle } from '../rss/formatter';
 
@@ -15,22 +16,29 @@ export function createBot(): Telegraf {
 
   bot.command('start', handleStart);
   bot.command('help', handleStart);
-  bot.command('add', handleAdd);
   bot.command('list', handleList);
-  bot.command('remove', handleRemove);
   bot.command('translate', handleTranslate);
   bot.command('news', handleNews);
 
-  bot.action(/^tr:(.+)$/, async (ctx) => {
-    const hash = ctx.match[1];
+  // Callback data format: tr:<feedHash12>:<articleHash12>
+  bot.action(/^tr:([a-f0-9]{12}):([a-f0-9]{12})$/, async (ctx) => {
+    const feedHash = ctx.match[1];
+    const artHash = ctx.match[2];
 
-    // Answer Telegram immediately — prevents the 10-second spinning indicator
     await ctx.answerCbQuery('⏳ Перекладаю…');
 
     try {
-      const article = await getArticleForTranslation(hash);
+      const feeds = getConfiguredFeeds();
+      const feedUrl = feeds.find(u => shortHash(u) === feedHash);
+      if (!feedUrl) {
+        await ctx.reply('Стрічка більше не налаштована.');
+        return;
+      }
+
+      const result = await fetchFeed(feedUrl, null);
+      const article = result.articles.find(a => articleHash(a.link) === artHash);
       if (!article) {
-        await ctx.reply('Стаття більше недоступна для перекладу (дані зберігаються 24 год).');
+        await ctx.reply('Стаття більше недоступна в стрічці.');
         return;
       }
 
@@ -42,15 +50,7 @@ export function createBot(): Telegraf {
         return;
       }
 
-      const fakeArticle = {
-        title: article.title,
-        link: article.link,
-        summary: article.summary,
-        feedName: article.feedName,
-        feedUrl: '',
-      };
-      const translatedText = formatArticle(fakeArticle, translated);
-
+      const translatedText = formatArticle(article, translated);
       const msg = ctx.callbackQuery.message;
       if (!msg) return;
 

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createBot } from '../src/bot';
-import { getAllUserIds } from '../src/storage/redis';
+import { getChatId } from '../src/config';
 import { deliverNewArticles } from '../src/bot/commands/news';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -21,21 +21,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const bot = createBot();
-  const userIds = await getAllUserIds();
+  const chatId = getChatId();
 
-  let delivered = 0;
-  let errors = 0;
-
-  for (const chatId of userIds) {
-    try {
-      await deliverNewArticles(bot, chatId);
-      delivered++;
-    } catch (err) {
-      console.error(`Failed to deliver articles to ${chatId}:`, err);
-      errors++;
-    }
+  try {
+    await deliverNewArticles(bot, chatId);
+    console.log(`Cron: delivered articles to ${chatId}`);
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('Cron error:', err);
+    res.status(200).json({ ok: false });
   }
-
-  console.log(`Cron: processed ${userIds.length} users, delivered=${delivered}, errors=${errors}`);
-  res.status(200).json({ ok: true, users: userIds.length, delivered, errors });
 }
