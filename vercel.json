@@ -8,7 +8,10 @@
   ],
   "functions": {
     "api/webhook.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
+    },
+    "api/setup.ts": {
+      "maxDuration": 10
     },
     "api/cron.ts": {
       "maxDuration": 300

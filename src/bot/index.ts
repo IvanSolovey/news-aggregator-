@@ -23,12 +23,19 @@ export function createBot(): Telegraf {
   bot.command('translate', handleTranslate);
   bot.command('news', handleNews);
 
-  // Callback data format: tr:<feedHash12>:<articleHash12>
+  // Backward compat: old buttons used a single hash (tr:<hash>)
+  bot.action(/^tr:[a-f0-9]{12}$/, async (ctx) => {
+    await ctx.answerCbQuery('Надішліть /news ще раз — формат кнопок оновлено.').catch(() => {});
+  });
+
+  // Current format: tr:<feedHash>:<articleHash>
   bot.action(/^tr:([a-f0-9]{12}):([a-f0-9]{12})$/, async (ctx) => {
     const feedHash = ctx.match[1];
     const artHash = ctx.match[2];
 
-    await ctx.answerCbQuery('⏳ Перекладаю…');
+    try {
+      await ctx.answerCbQuery('⏳ Перекладаю…');
+    } catch { /* callback query expired — continue anyway */ }
 
     try {
       const feeds = await getFeeds();
