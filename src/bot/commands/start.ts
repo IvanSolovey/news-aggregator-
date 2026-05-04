@@ -4,7 +4,7 @@ import { saveChatId } from '../../storage/feeds';
 export function mainKeyboard() {
   return Markup.keyboard([
     ['/news', '/list'],
-    ['/translate'],
+    ['/add', '/translate'],
   ]).resize();
 }
 

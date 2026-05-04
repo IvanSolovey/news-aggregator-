@@ -1,5 +1,6 @@
 import { type Context } from 'telegraf';
-import { addFeed, removeFeed, getFeeds } from '../../storage/feeds';
+import { addFeed, removeFeed, getFeeds, markArticleSent } from '../../storage/feeds';
+import { shortHash } from '../../config';
 import { fetchFeed } from '../../rss/fetcher';
 
 function isValidUrl(str: string): boolean {
@@ -44,6 +45,14 @@ export async function handleAdd(ctx: Context): Promise<void> {
   }
 
   await addFeed(url, feedName);
+
+  // Silently mark all existing articles as seen so the user isn't flooded
+  // with historical content on first /news — only future articles will be delivered
+  try {
+    const { articles } = await fetchFeed(url, null);
+    await Promise.all(articles.map(a => markArticleSent(shortHash(a.link))));
+  } catch { /* non-critical, dedup will still work going forward */ }
+
   await ctx.replyWithHTML(`✅ Додано: <b>${feedName}</b>`);
 }
 
