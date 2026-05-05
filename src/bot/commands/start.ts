@@ -22,6 +22,8 @@ export async function handleStart(ctx: Context): Promise<void> {
     `/remove &lt;номер&gt; — видалити стрічку\n` +
     `/translate — статус автоперекладу\n` +
     `/news — отримати свіжі новини зараз\n\n` +
+    `<b>Імпорт OPML:</b>\n` +
+    `Надішліть файл <code>.opml</code> або <code>.xml</code> щоб імпортувати список RSS-стрічок одразу.\n\n` +
     `<b>Приклад:</b>\n` +
     `/add https://feeds.bbci.co.uk/news/rss.xml`,
     mainKeyboard()

@@ -3,6 +3,7 @@ import { handleStart } from './commands/start';
 import { handleAdd, handleList, handleRemove } from './commands/feeds';
 import { handleTranslate } from './commands/settings';
 import { handleNews, articleHash } from './commands/news';
+import { handleOpmlFile } from './commands/opml';
 import { getFeeds } from '../storage/feeds';
 import { shortHash } from '../config';
 import { fetchFeed } from '../rss/fetcher';
@@ -96,6 +97,8 @@ export function createBot(): Telegraf {
       await ctx.reply('Технічна помилка. Спробуйте пізніше.').catch(() => {});
     }
   });
+
+  bot.on('document', handleOpmlFile);
 
   bot.on('message', ctx =>
     ctx.reply('Невідома команда. Напишіть /help щоб побачити список команд.')
