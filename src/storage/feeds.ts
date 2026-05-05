@@ -24,7 +24,9 @@ export async function removeFeed(url: string): Promise<void> {
 export async function getFeeds(): Promise<FeedInfo[]> {
   const data = await redis.hgetall<Record<string, string>>(FEEDS_KEY);
   if (!data) return [];
-  return Object.entries(data).map(([url, name]) => ({ url, name }));
+  return Object.entries(data)
+    .map(([url, name]) => ({ url, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function saveChatId(chatId: number): Promise<void> {
